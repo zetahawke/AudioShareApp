@@ -47,9 +47,12 @@ const SettingsScreen: React.FC = () => {
       }
       
       const logPath = `${FileSystem.documentDirectory}error_log.txt`;
+      console.log('Attempting to read from:', logPath);
       
       // Check if file exists first
       const fileInfo = await FileSystem.getInfoAsync(logPath);
+      console.log('File info:', fileInfo);
+      
       if (!fileInfo.exists) {
         setCrashLogs('No crash logs found');
         return;
@@ -122,6 +125,16 @@ const SettingsScreen: React.FC = () => {
         
         <TouchableOpacity style={styles.debugButton} onPress={testErrorBoundary}>
           <Text style={styles.debugButtonText}>Test Error Boundary</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.debugButton} onPress={() => {
+          const dir = FileSystem.documentDirectory;
+          const cacheDir = FileSystem.cacheDirectory;
+          console.log('Document directory:', dir);
+          console.log('Cache directory:', cacheDir);
+          setCrashLogs(`Document dir: ${dir}\nCache dir: ${cacheDir}`);
+        }}>
+          <Text style={styles.debugButtonText}>Check FileSystem Paths</Text>
         </TouchableOpacity>
 
         {crashLogs ? (

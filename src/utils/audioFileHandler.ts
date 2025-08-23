@@ -98,7 +98,10 @@ export class AudioFileHandler {
   async getFileSize(filePath: string): Promise<number> {
     try {
       const fileInfo = await FileSystem.getInfoAsync(filePath);
-      return fileInfo.size || 0;
+      if (fileInfo.exists && 'size' in fileInfo) {
+        return fileInfo.size || 0;
+      }
+      return 0;
     } catch (error) {
       console.error('Error getting file size:', error);
       return 0;

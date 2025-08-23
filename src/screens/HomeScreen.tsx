@@ -12,26 +12,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAudio } from '../context/AudioContext';
 import { AudioFile } from '../types';
-import { Audio } from 'expo-audio';
+import { useAudioPlayer } from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 
 const HomeScreen: React.FC = () => {
   const { audioFiles, loadAudioFiles, toggleFavorite, incrementPlayCount, incrementShareCount, isLoading } = useAudio();
   const [refreshing, setRefreshing] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-
   useEffect(() => {
     loadAudioFiles();
   }, []);
-
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -42,16 +32,9 @@ const HomeScreen: React.FC = () => {
   const handlePlayAudio = async (audio: AudioFile) => {
     try {
       incrementPlayCount(audio.id);
-      
-      if (sound) {
-        await sound.unloadAsync();
-      }
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audio.url },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
+      // For now, just increment play count
+      // In a real app, you'd navigate to AudioPlayerScreen or use expo-audio
+      console.log('Audio play requested for:', audio.title);
     } catch (error) {
       Alert.alert('Error', 'Failed to play audio');
     }

@@ -16,7 +16,9 @@
       "bundleIdentifier": "com.audioshare.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to microphone for audio playback",
-        "NSCameraUsageDescription": "This app needs access to camera for QR code scanning"
+        "NSCameraUsageDescription": "This app needs access to camera for QR code scanning",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library for sharing audio files",
+        "NSPhotoLibraryAddUsageDescription": "This app needs access to save shared audio files"
       }
     },
     "android": {
@@ -28,14 +30,21 @@
       "package": "com.audioshare.app",
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow AudioShareApp to access your microphone for audio recording."
+        }
+      ],
       "expo-video"
     ],
     "extra": {

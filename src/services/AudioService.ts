@@ -1,5 +1,6 @@
 import { AudioFile } from '../types';
 import * as FileSystem from 'expo-file-system';
+import { audioManifest, AudioManifestItem, audioModules } from '../config/audioManifest';
 
 // Configuration for different audio sources
 export interface AudioSourceConfig {
@@ -14,7 +15,7 @@ export interface AudioSourceConfig {
 // Default configuration for local testing
 const defaultConfig: AudioSourceConfig = {
   type: 'local',
-  baseUrl: 'file://src/repository/audios/',
+  baseUrl: 'assets/audios/',
 };
 
 class AudioService {
@@ -44,36 +45,59 @@ class AudioService {
     }
   }
 
-  // Get audio files from local repository
+  // Get audio files from assets/audios folder using manifest
   private async getLocalAudioFiles(): Promise<AudioFile[]> {
     try {
-      // For now, return the known local audio file
-      // In the future, this could scan the directory for all audio files
-      const localAudioFiles: AudioFile[] = [
-        {
-          id: '1',
-          title: 'Te Pego Hasta Que Adelgaci',
-          description: 'Local audio file from repository',
-          author: 'Local Artist',
-          duration: 132, // Approximate duration
-          // Use a remote URL for now since local files can't be played directly
-          // In production, you'd want to upload these to a CDN or use asset modules
-          url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav', // Placeholder for testing
-          thumbnail: 'https://via.placeholder.com/150x150/6200ee/ffffff?text=🎵',
-          category: 'Local',
-          tags: ['local', 'audio', 'repository', 'ogg'],
-          playCount: 0,
-          shareCount: 0,
-          isFavorite: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-      ];
+      const localAudioFiles: AudioFile[] = [];
 
-      console.log('Loaded local audio files:', localAudioFiles.length);
+
+
+      for (const manifestItem of audioManifest) {
+        try {
+          // Get the audio module from our static mapping
+          const audioModule = audioModules[manifestItem.filename];
+          
+          if (!audioModule) {
+            console.warn(`⚠️ No static require found for ${manifestItem.filename}`);
+            continue;
+          }
+          
+          // Create AudioFile object
+          const audioFile: AudioFile = {
+            id: manifestItem.filename.replace('.mp3', ''), // Use filename as ID
+            title: manifestItem.title,
+            description: manifestItem.description,
+            author: manifestItem.author,
+            duration: manifestItem.estimatedDuration || 0, // Use estimated duration initially
+            url: audioModule,
+            thumbnail: 'https://via.placeholder.com/150x150/6200ee/ffffff?text=🎵',
+            category: manifestItem.category,
+            tags: manifestItem.tags,
+            playCount: 0,
+            shareCount: 0,
+            isFavorite: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          localAudioFiles.push(audioFile);
+          console.log(`✅ Loaded audio file: ${manifestItem.title} (${manifestItem.filename})`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to load audio file ${manifestItem.filename}:`, error);
+          // Continue loading other files even if one fails
+        }
+      }
+
+      console.log(`🎵 Total local audio files loaded: ${localAudioFiles.length}/${audioManifest.length}`);
+      
+      if (localAudioFiles.length === 0) {
+        console.warn('No audio files could be loaded, falling back to mock data');
+        return this.getMockAudioFiles();
+      }
+      
       return localAudioFiles;
     } catch (error) {
-      console.error('Error loading local audio files:', error);
+      console.error('❌ Error loading local audio files:', error);
       // Fallback to mock data if local loading fails
       return this.getMockAudioFiles();
     }
@@ -170,20 +194,21 @@ class AudioService {
 
   // Get local repository path
   getLocalRepositoryPath(): string {
-    return 'src/repository/audios/';
+    return 'assets/audios/';
   }
 
-  // Check if local audio file exists
+  // Check if local audio file exists in assets
   async checkLocalAudioFile(filename: string): Promise<boolean> {
     try {
-      const filePath = `${this.getLocalRepositoryPath()}${filename}`;
-      const fileInfo = await FileSystem.getInfoAsync(filePath);
-      return fileInfo.exists;
+      // Check if the file exists in our static audioModules
+      return filename in audioModules;
     } catch (error) {
-      console.error('Error checking local audio file:', error);
+      console.warn(`Audio file ${filename} not found in assets:`, error);
       return false;
     }
   }
+
+
 }
 
 // Export singleton instance
