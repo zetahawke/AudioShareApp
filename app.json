@@ -35,12 +35,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-av"
+      "expo-audio",
+      "expo-video"
     ],
     "extra": {
       "eas": {
         "projectId": "your-project-id"
       }
+    },
+    "tunnel": {
+      "enabled": true,
+      "provider": "ngrok"
     }
   }
 }

@@ -1,238 +1,163 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Switch,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { RootStackParamList } from '../types';
+import { useAuth } from '../context/AuthContext';
+import * as FileSystem from 'expo-file-system';
 
 const SettingsScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const [notifications, setNotifications] = useState(true);
-  const [autoPlay, setAutoPlay] = useState(false);
-  const [highQuality, setHighQuality] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-
-  const navigateToScreen = (screenName: keyof RootStackParamList) => {
-    navigation.navigate(screenName as any);
-  };
-
-  const handleClearCache = () => {
-    Alert.alert(
-      'Clear Cache',
-      'This will clear all cached audio files. Are you sure?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Success', 'Cache cleared successfully');
-          },
-        },
-      ]
-    );
-  };
-
-  const handleResetSettings = () => {
-    Alert.alert(
-      'Reset Settings',
-      'This will reset all settings to default. Are you sure?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            setNotifications(true);
-            setAutoPlay(false);
-            setHighQuality(true);
-            setDarkMode(false);
-            Alert.alert('Success', 'Settings reset to default');
-          },
-        },
-      ]
-    );
-  };
-
-  const settingsSections = [
-    {
-      title: 'Audio Settings',
-      items: [
-        {
-          title: 'Auto-play audio',
-          subtitle: 'Automatically play audio when selected',
-          type: 'switch',
-          value: autoPlay,
-          onValueChange: setAutoPlay,
-        },
-        {
-          title: 'High quality audio',
-          subtitle: 'Use high quality audio (uses more data)',
-          type: 'switch',
-          value: highQuality,
-          onValueChange: setHighQuality,
-        },
-      ],
-    },
-    {
-      title: 'App Settings',
-      items: [
-        {
-          title: 'Push notifications',
-          subtitle: 'Receive notifications about new audio',
-          type: 'switch',
-          value: notifications,
-          onValueChange: setNotifications,
-        },
-        {
-          title: 'Dark mode',
-          subtitle: 'Use dark theme (coming soon)',
-          type: 'switch',
-          value: darkMode,
-          onValueChange: setDarkMode,
-          disabled: true,
-        },
-      ],
-    },
-    {
-      title: 'Data & Storage',
-      items: [
-        {
-          title: 'Clear cache',
-          subtitle: 'Free up storage space',
-          type: 'button',
-          onPress: handleClearCache,
-        },
-        {
-          title: 'Download quality',
-          subtitle: 'Choose audio download quality',
-          type: 'navigation',
-          onPress: () => Alert.alert('Info', 'Download quality settings coming soon'),
-        },
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        {
-          title: 'Help & Support',
-          subtitle: 'Get help with the app',
-          type: 'navigation',
-          onPress: () => navigateToScreen('Help'),
-        },
-        {
-          title: 'Contact Us',
-          subtitle: 'Get in touch with our team',
-          type: 'navigation',
-          onPress: () => navigateToScreen('ContactUs'),
-        },
-        {
-          title: 'Send Feedback',
-          subtitle: 'Help us improve the app',
-          type: 'navigation',
-          onPress: () => navigateToScreen('Feedback'),
-        },
-      ],
-    },
-    {
-      title: 'Legal',
-      items: [
-        {
-          title: 'Privacy Policy',
-          subtitle: 'Read our privacy policy',
-          type: 'navigation',
-          onPress: () => navigateToScreen('PrivacyPolicy'),
-        },
-        {
-          title: 'Terms of Service',
-          subtitle: 'Read our terms of service',
-          type: 'navigation',
-          onPress: () => navigateToScreen('TermsOfService'),
-        },
-      ],
-    },
-  ];
-
-  const renderSettingItem = (item: any, index: number) => {
-    switch (item.type) {
-      case 'switch':
-        return (
-          <View key={index} style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingTitle}>{item.title}</Text>
-              <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
-            </View>
-            <Switch
-              value={item.value}
-              onValueChange={item.onValueChange}
-              trackColor={{ false: '#e0e0e0', true: '#6200ee' }}
-              thumbColor={item.disabled ? '#ccc' : '#fff'}
-              disabled={item.disabled}
-            />
-          </View>
-        );
-      case 'button':
-        return (
-          <TouchableOpacity key={index} style={styles.settingItem} onPress={item.onPress}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingTitle}>{item.title}</Text>
-              <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-        );
-      case 'navigation':
-        return (
-          <TouchableOpacity key={index} style={styles.settingItem} onPress={item.onPress}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingTitle}>{item.title}</Text>
-              <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-        );
-      default:
-        return null;
+  const { logout, user } = useAuth();
+  const [crashLogs, setCrashLogs] = useState<string>('');
+  // Get app version from package.json safely
+  const [appVersion, setAppVersion] = useState<string>('1.0.0');
+  
+  useEffect(() => {
+    try {
+      // Try to get version from package.json, fallback to default
+      const packageInfo = require('../../package.json');
+      setAppVersion(packageInfo.version || '1.0.0');
+    } catch (error) {
+      console.log('Could not load package.json, using default version');
+      setAppVersion('1.0.0');
     }
+  }, []);
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', onPress: logout },
+      ]
+    );
+  };
+
+  const viewCrashLogs = async () => {
+    try {
+      if (!FileSystem.documentDirectory) {
+        setCrashLogs('Document directory not available');
+        return;
+      }
+      
+      const logPath = `${FileSystem.documentDirectory}error_log.txt`;
+      
+      // Check if file exists first
+      const fileInfo = await FileSystem.getInfoAsync(logPath);
+      if (!fileInfo.exists) {
+        setCrashLogs('No crash logs found');
+        return;
+      }
+      
+      const logs = await FileSystem.readAsStringAsync(logPath);
+      setCrashLogs(logs || 'No crash logs found');
+    } catch (error) {
+      console.error('Error reading crash logs:', error);
+      setCrashLogs(`Error reading crash logs: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const clearCrashLogs = async () => {
+    try {
+      if (!FileSystem.documentDirectory) {
+        Alert.alert('Error', 'Document directory not available');
+        return;
+      }
+      
+      const logPath = `${FileSystem.documentDirectory}error_log.txt`;
+      
+      // Check if file exists first
+      const fileInfo = await FileSystem.getInfoAsync(logPath);
+      if (!fileInfo.exists) {
+        setCrashLogs('No crash logs to clear');
+        return;
+      }
+      
+      await FileSystem.deleteAsync(logPath);
+      setCrashLogs('Crash logs cleared');
+    } catch (error) {
+      console.error('Error clearing crash logs:', error);
+      Alert.alert('Error', `Failed to clear crash logs: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const testErrorBoundary = () => {
+    // This will trigger the ErrorBoundary
+    throw new Error('Test error to trigger ErrorBoundary');
   };
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <Text style={styles.headerSubtitle}>Customize your app experience</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account</Text>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Email</Text>
+          <Text style={styles.settingValue}>{user?.email}</Text>
+        </View>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Username</Text>
+          <Text style={styles.settingValue}>{user?.username}</Text>
+        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
       </View>
 
-      {settingsSections.map((section, sectionIndex) => (
-        <View key={sectionIndex} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          <View style={styles.sectionContainer}>
-            {section.items.map((item, itemIndex) => renderSettingItem(item, itemIndex))}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Debug & Development</Text>
+        
+        <TouchableOpacity style={styles.debugButton} onPress={viewCrashLogs}>
+          <Text style={styles.debugButtonText}>View Crash Logs</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.debugButton} onPress={clearCrashLogs}>
+          <Text style={styles.debugButtonText}>Clear Crash Logs</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.debugButton} onPress={testErrorBoundary}>
+          <Text style={styles.debugButtonText}>Test Error Boundary</Text>
+        </TouchableOpacity>
+
+        {crashLogs ? (
+          <View style={styles.logsContainer}>
+            <Text style={styles.logsTitle}>Crash Logs:</Text>
+            <Text style={styles.logsText}>{crashLogs}</Text>
           </View>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>App Information</Text>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Builder</Text>
+          <Text style={styles.settingValue}>Expo Go</Text>
         </View>
-      ))}
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Version</Text>
+          <Text style={styles.settingValue}>{appVersion}</Text>
+        </View>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Developer</Text>
+          <Text style={styles.settingValue}>{"Michel Szinavel"}</Text>
+        </View>
+      </View>
 
-      <TouchableOpacity style={styles.resetButton} onPress={handleResetSettings}>
-        <Ionicons name="refresh-outline" size={24} color="#e74c3c" />
-        <Text style={styles.resetButtonText}>Reset All Settings</Text>
-      </TouchableOpacity>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>AudioShare v1.0.0</Text>
-        <Text style={styles.footerSubtext}>Made with ❤️ for audio lovers</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>System Information</Text>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Platform</Text>
+          <Text style={styles.settingValue}>{Platform.OS}</Text>
+        </View>
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Version</Text>
+          <Text style={styles.settingValue}>{Platform.Version}</Text>
+        </View>
       </View>
     </ScrollView>
   );
@@ -243,92 +168,76 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
   section: {
-    marginTop: 20,
+    backgroundColor: '#fff',
+    marginVertical: 10,
+    padding: 20,
+    borderRadius: 10,
+    marginHorizontal: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginBottom: 15,
     color: '#333',
-    marginBottom: 10,
-    marginLeft: 20,
-  },
-  sectionContainer: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    borderRadius: 15,
-    overflow: 'hidden',
   },
   settingItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    alignItems: 'center',
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  settingInfo: {
-    flex: 1,
-    marginRight: 15,
-  },
-  settingTitle: {
+  settingLabel: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 3,
-  },
-  settingSubtitle: {
-    fontSize: 14,
     color: '#666',
-    lineHeight: 20,
   },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    marginTop: 20,
-    marginHorizontal: 20,
-    padding: 20,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: '#e74c3c',
-  },
-  resetButtonText: {
+  settingValue: {
     fontSize: 16,
-    color: '#e74c3c',
-    fontWeight: '600',
-    marginLeft: 10,
+    color: '#333',
+    fontWeight: '500',
   },
-  footer: {
-    alignItems: 'center',
-    padding: 30,
+  logoutButton: {
+    backgroundColor: '#ff6b6b',
+    padding: 15,
+    borderRadius: 8,
     marginTop: 20,
+    alignItems: 'center',
   },
-  footerText: {
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  debugButton: {
+    backgroundColor: '#6200ee',
+    padding: 12,
+    borderRadius: 6,
+    marginVertical: 5,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: '#fff',
     fontSize: 14,
-    color: '#888',
-    marginBottom: 5,
+    fontWeight: '500',
   },
-  footerSubtext: {
+  logsContainer: {
+    backgroundColor: '#f8f9fa',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 15,
+  },
+  logsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  logsText: {
     fontSize: 12,
-    color: '#aaa',
+    fontFamily: 'monospace',
+    color: '#666',
   },
 });
 

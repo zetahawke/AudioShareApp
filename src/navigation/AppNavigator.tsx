@@ -25,6 +25,7 @@ const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
+        {...({} as any)}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#6200ee',

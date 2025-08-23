@@ -1,4 +1,5 @@
 import { AudioFile } from '../types';
+import * as FileSystem from 'expo-file-system';
 
 // Configuration for different audio sources
 export interface AudioSourceConfig {
@@ -13,7 +14,7 @@ export interface AudioSourceConfig {
 // Default configuration for local testing
 const defaultConfig: AudioSourceConfig = {
   type: 'local',
-  baseUrl: 'https://example.com/audio/', // Replace with your actual audio files URL
+  baseUrl: 'file://src/repository/audios/',
 };
 
 class AudioService {
@@ -43,11 +44,39 @@ class AudioService {
     }
   }
 
-  // Get audio files from local testing source
+  // Get audio files from local repository
   private async getLocalAudioFiles(): Promise<AudioFile[]> {
-    // For testing, return mock data
-    // In production, this could fetch from a local server or CDN
-    return this.getMockAudioFiles();
+    try {
+      // For now, return the known local audio file
+      // In the future, this could scan the directory for all audio files
+      const localAudioFiles: AudioFile[] = [
+        {
+          id: '1',
+          title: 'Te Pego Hasta Que Adelgaci',
+          description: 'Local audio file from repository',
+          author: 'Local Artist',
+          duration: 132, // Approximate duration
+          // Use a remote URL for now since local files can't be played directly
+          // In production, you'd want to upload these to a CDN or use asset modules
+          url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav', // Placeholder for testing
+          thumbnail: 'https://via.placeholder.com/150x150/6200ee/ffffff?text=🎵',
+          category: 'Local',
+          tags: ['local', 'audio', 'repository', 'ogg'],
+          playCount: 0,
+          shareCount: 0,
+          isFavorite: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+      ];
+
+      console.log('Loaded local audio files:', localAudioFiles.length);
+      return localAudioFiles;
+    } catch (error) {
+      console.error('Error loading local audio files:', error);
+      // Fallback to mock data if local loading fails
+      return this.getMockAudioFiles();
+    }
   }
 
   // Get audio files from AWS S3
@@ -80,18 +109,19 @@ class AudioService {
     }
   }
 
-  // Mock audio files for testing
+  // Mock audio files for testing (fallback)
   private getMockAudioFiles(): AudioFile[] {
     return [
       {
-        id: '1',
+        id: 'mock-1',
         title: 'Sample Song 1',
-        artist: 'Artist A',
-        album: 'Album 1',
+        description: 'A sample audio track for testing',
+        author: 'Artist A',
         duration: 180, // 3 minutes
-        fileSize: 5.2, // MB
         url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav', // Free sample audio
         thumbnail: 'https://via.placeholder.com/150x150/6200ee/ffffff?text=🎵',
+        category: 'Sample',
+        tags: ['sample', 'test', 'audio'],
         playCount: 0,
         shareCount: 0,
         isFavorite: false,
@@ -99,29 +129,15 @@ class AudioService {
         updatedAt: new Date(),
       },
       {
-        id: '2',
+        id: 'mock-2',
         title: 'Sample Song 2',
-        artist: 'Artist B',
-        album: 'Album 2',
+        description: 'Another sample audio track for testing',
+        author: 'Artist B',
         duration: 240, // 4 minutes
-        fileSize: 7.8, // MB
         url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav', // Free sample audio
         thumbnail: 'https://via.placeholder.com/150x150/03dac6/ffffff?text=🎵',
-        playCount: 0,
-        shareCount: 0,
-        isFavorite: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        id: '3',
-        title: 'Sample Song 3',
-        artist: 'Artist C',
-        album: 'Album 3',
-        duration: 200, // 3:20 minutes
-        fileSize: 6.1, // MB
-        url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav', // Free sample audio
-        thumbnail: 'https://via.placeholder.com/150x150/ff6b6b/ffffff?text=🎵',
+        category: 'Sample',
+        tags: ['sample', 'test', 'audio'],
         playCount: 0,
         shareCount: 0,
         isFavorite: false,
@@ -148,6 +164,23 @@ class AudioService {
       return true;
     } catch (error) {
       console.error('Connection test failed:', error);
+      return false;
+    }
+  }
+
+  // Get local repository path
+  getLocalRepositoryPath(): string {
+    return 'src/repository/audios/';
+  }
+
+  // Check if local audio file exists
+  async checkLocalAudioFile(filename: string): Promise<boolean> {
+    try {
+      const filePath = `${this.getLocalRepositoryPath()}${filename}`;
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      return fileInfo.exists;
+    } catch (error) {
+      console.error('Error checking local audio file:', error);
       return false;
     }
   }

@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAudio } from '../context/AudioContext';
 import { AudioFile } from '../types';
-import { Audio } from 'expo-av';
+import { Audio } from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 

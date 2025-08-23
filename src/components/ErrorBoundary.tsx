@@ -38,6 +38,11 @@ class ErrorBoundary extends Component<Props, State> {
 
   private async logErrorToFile(error: Error, errorInfo: any) {
     try {
+      if (!FileSystem.documentDirectory) {
+        console.error('Document directory not available for error logging');
+        return;
+      }
+
       const errorLog = {
         timestamp: new Date().toISOString(),
         error: {
@@ -54,9 +59,24 @@ class ErrorBoundary extends Component<Props, State> {
       const logPath = `${FileSystem.documentDirectory}error_log.txt`;
       
       // Append to existing log file
-      await FileSystem.writeAsStringAsync(logPath, logEntry, {
-        append: true,
-      });
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(logPath);
+        if (fileInfo.exists) {
+          const existingContent = await FileSystem.readAsStringAsync(logPath);
+          await FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+        } else {
+          // If file doesn't exist, create it
+          await FileSystem.writeAsStringAsync(logPath, logEntry);
+        }
+      } catch (writeError) {
+        console.error('Failed to write to error log file:', writeError);
+        // Try to create a new file if writing fails
+        try {
+          await FileSystem.writeAsStringAsync(logPath, logEntry);
+        } catch (createError) {
+          console.error('Failed to create error log file:', createError);
+        }
+      }
       
       console.log('Error logged to:', logPath);
     } catch (logError) {

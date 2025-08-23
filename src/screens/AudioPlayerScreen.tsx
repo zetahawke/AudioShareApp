@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { useAudio } from '../context/AudioContext';
-import { Audio } from 'expo-av';
+import { Audio } from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 
@@ -52,8 +52,17 @@ const AudioPlayerScreen: React.FC = () => {
           setIsPlaying(true);
         }
       } else {
+        // Handle local file paths properly
+        let audioUri = audio.url;
+        
+        // Convert local file paths to proper URIs
+        if (audio.url.startsWith('src/')) {
+          // For local repository files, we need to use asset module or copy to documents
+          audioUri = audio.url; // This will need to be handled differently
+        }
+        
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: audio.url },
+          { uri: audioUri },
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
@@ -62,7 +71,8 @@ const AudioPlayerScreen: React.FC = () => {
         incrementPlayCount(audio.id);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to play audio');
+      console.error('Audio playback error:', error);
+      Alert.alert('Error', 'Failed to play audio. Please check if the file exists and is supported.');
     }
   };
 
@@ -84,24 +94,34 @@ const AudioPlayerScreen: React.FC = () => {
     try {
       incrementShareCount(audio.id);
       
-      // Create WhatsApp share URL
+      // Create share message
       const message = `Check out this audio: ${audio.title} by ${audio.author}\n\n${audio.description}\n\nListen now on AudioShare!`;
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
       
-      // Check if WhatsApp is installed
-      const canOpen = await Linking.canOpenURL(whatsappUrl);
-      
-      if (canOpen) {
-        await Linking.openURL(whatsappUrl);
-      } else {
-        // Fallback to general sharing
-        await Sharing.shareAsync(audio.url, {
-          mimeType: 'audio/mpeg',
+      // For local files, we can't share the file directly, so we share the message
+      if (audio.url.startsWith('file://') || audio.url.startsWith('src/')) {
+        // Share text message instead of file
+        await Sharing.shareAsync(message, {
+          mimeType: 'text/plain',
           dialogTitle: `Share ${audio.title}`,
         });
+      } else {
+        // For remote URLs, try to share the file
+        try {
+          await Sharing.shareAsync(audio.url, {
+            mimeType: 'audio/mpeg',
+            dialogTitle: `Share ${audio.title}`,
+          });
+        } catch (shareError) {
+          // If file sharing fails, fallback to text sharing
+          await Sharing.shareAsync(message, {
+            mimeType: 'text/plain',
+            dialogTitle: `Share ${audio.title}`,
+          });
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to share audio');
+      console.error('Share error:', error);
+      Alert.alert('Error', 'Failed to share audio. Please try again.');
     }
   };
 
