@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,6 +8,8 @@ import { AuthProvider } from './src/context/AuthContext';
 import { AudioProvider } from './src/context/AudioContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import { AudioDebugger } from './src/utils/audioDebugger';
+import AssetMapper from './src/services/assetMapper';
 
 // Enable screens for better performance
 enableScreens();
@@ -25,6 +27,30 @@ LogBox.ignoreLogs([
 ]);
 
 export default function App() {
+  // Initialize logging system and asset mapper at app startup
+  useEffect(() => {
+    const initializeServices = async () => {
+      try {
+        // Initialize logging system
+        await AudioDebugger.initializeLoggingSystem();
+        console.log('✅ Logging system initialized');
+        
+        // Initialize asset mapper
+        await AssetMapper.getInstance().initialize();
+        console.log('✅ Asset mapper initialized');
+        
+        // Optionally preload all assets for faster sharing
+        await AssetMapper.getInstance().preloadAllAssets();
+        console.log('✅ All assets preloaded');
+        
+      } catch (error) {
+        console.error('❌ Failed to initialize services:', error);
+      }
+    };
+    
+    initializeServices();
+  }, []);
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

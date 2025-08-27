@@ -8,20 +8,45 @@ import {
   Alert,
   RefreshControl,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { useAudio } from '../context/AudioContext';
 import { AudioFile } from '../types';
-import { useAudioPlayer } from 'expo-audio';
-import * as Sharing from 'expo-sharing';
-import * as Linking from 'expo-linking';
+import { RootStackParamList } from '../types';
+import SharingService from '../services/sharingService';
+
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Main'>;
 
 const HomeScreen: React.FC = () => {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { audioFiles, loadAudioFiles, toggleFavorite, incrementPlayCount, incrementShareCount, isLoading } = useAudio();
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredAudioFiles, setFilteredAudioFiles] = useState<AudioFile[]>([]);
+  
   useEffect(() => {
     loadAudioFiles();
   }, []);
+
+  // Filter audio files based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredAudioFiles(audioFiles);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = audioFiles.filter(audio => 
+        audio.title.toLowerCase().includes(query) ||
+        audio.author.toLowerCase().includes(query) ||
+        audio.description.toLowerCase().includes(query) ||
+        audio.tags.some(tag => tag.toLowerCase().includes(query)) ||
+        audio.category.toLowerCase().includes(query)
+      );
+      setFilteredAudioFiles(filtered);
+    }
+  }, [searchQuery, audioFiles]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -29,38 +54,61 @@ const HomeScreen: React.FC = () => {
     setRefreshing(false);
   };
 
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
+
   const handlePlayAudio = async (audio: AudioFile) => {
     try {
+      console.log('🎵 Play button pressed for:', audio.title);
+      console.log('🎵 Audio object:', audio);
+      console.log('🎵 Audio URL:', audio.url);
+      console.log('🎵 Audio URL type:', typeof audio.url);
+      
       incrementPlayCount(audio.id);
-      // For now, just increment play count
-      // In a real app, you'd navigate to AudioPlayerScreen or use expo-audio
-      console.log('Audio play requested for:', audio.title);
+      console.log('✅ Play count incremented');
+      
+      // Navigate to AudioPlayer screen
+      console.log('🧭 Navigating to AudioPlayer...');
+      navigation.navigate('AudioPlayer', { audio });
+      console.log('✅ Navigation completed');
+      
     } catch (error) {
+      console.error('❌ Play audio error:', error);
       Alert.alert('Error', 'Failed to play audio');
     }
   };
 
   const handleShareAudio = async (audio: AudioFile) => {
     try {
+      console.log('📤 Share button pressed for:', audio.title);
+      console.log('📤 Audio object:', audio);
+      console.log('📤 Audio URL:', audio.url);
+      console.log('📤 Audio URL type:', typeof audio.url);
+      
       incrementShareCount(audio.id);
+      console.log('✅ Share count incremented');
       
-      // Create WhatsApp share URL
-      const message = `Check out this audio: ${audio.title} by ${audio.author}\n\n${audio.description}`;
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      // Use the sharing service
+      console.log('🔧 Getting sharing service instance...');
+      const sharingService = SharingService.getInstance();
+      console.log('✅ Sharing service instance obtained');
       
-      // Check if WhatsApp is installed
-      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      console.log('🚀 Calling sharing service...');
+      const result = await sharingService.shareAudio(audio.url, {
+        title: audio.title,
+        mimeType: 'audio/mpeg'
+      });
       
-      if (canOpen) {
-        await Linking.openURL(whatsappUrl);
+      if (result.success) {
+        console.log('✅ Share completed successfully:', result.details);
       } else {
-        // Fallback to general sharing
-        await Sharing.shareAsync(audio.url, {
-          mimeType: 'audio/mpeg',
-          dialogTitle: `Share ${audio.title}`,
-        });
+        console.error('❌ Share failed:', result.error);
+        Alert.alert('Share Error', result.error || 'Failed to share audio');
       }
+      
     } catch (error) {
+      console.error('❌ Share audio error:', error);
       Alert.alert('Error', 'Failed to share audio');
     }
   };
@@ -120,6 +168,19 @@ const HomeScreen: React.FC = () => {
             color={item.isFavorite ? "#e91e63" : "#6200ee"}
           />
         </TouchableOpacity>
+        
+        {/* Test button for debugging */}
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: '#ff9800' }]}
+          onPress={() => {
+            console.log('🧪 Test button pressed');
+            console.log('🧪 Current audio files:', audioFiles.length);
+            console.log('🧪 Audio file example:', audioFiles[0]);
+            Alert.alert('Debug Info', `Audio files loaded: ${audioFiles.length}\nFirst file: ${audioFiles[0]?.title || 'None'}`);
+          }}
+        >
+          <Ionicons name="bug" size={24} color="white" />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -137,11 +198,41 @@ const HomeScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Discover Audio</Text>
-        <Text style={styles.headerSubtitle}>Find and share amazing audio content</Text>
+        <Text style={styles.headerSubtitle}>{filteredAudioFiles.length} of {audioFiles.length} audio clips</Text>
       </View>
-      
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search audio clips..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Search Results Info */}
+      {searchQuery.length > 0 && (
+        <View style={styles.searchResultsInfo}>
+          <Text style={styles.searchResultsText}>
+            Found {filteredAudioFiles.length} result{filteredAudioFiles.length !== 1 ? 's' : ''} for "{searchQuery}"
+          </Text>
+        </View>
+      )}
+
       <FlatList
-        data={audioFiles}
+        data={filteredAudioFiles}
         renderItem={renderAudioItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
@@ -149,6 +240,20 @@ const HomeScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search" size={80} color="#ccc" />
+            <Text style={styles.emptyTitle}>
+              {searchQuery.length > 0 ? 'No results found' : 'No audio files'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery.length > 0 
+                ? `Try searching for something else or clear your search`
+                : 'Audio files will appear here once loaded'
+              }
+            </Text>
+          </View>
+        }
       />
     </View>
   );
@@ -262,6 +367,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     minWidth: 50,
     alignItems: 'center',
+  },
+  searchContainer: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 0,
+  },
+  clearButton: {
+    padding: 5,
+  },
+  searchResultsInfo: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  searchResultsText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 10,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 5,
+    textAlign: 'center',
   },
 });
 

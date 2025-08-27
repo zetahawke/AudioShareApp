@@ -6,15 +6,19 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { useAudio } from '../context/AudioContext';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import { AudioDebugger } from '../utils/audioDebugger';
+import SharingService from '../services/sharingService';
 
 type AudioPlayerScreenRouteProp = RouteProp<RootStackParamList, 'AudioPlayer'>;
 
@@ -23,8 +27,50 @@ const AudioPlayerScreen: React.FC = () => {
   const { audio } = route.params;
   const { toggleFavorite, incrementPlayCount, incrementShareCount } = useAudio();
   
+  // Create audio player at component level (following React hooks rules)
   const player = useAudioPlayer(audio.url);
   const status = useAudioPlayerStatus(player);
+  
+  // Validate audio URL and track errors
+  const [playerError, setPlayerError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    try {
+      console.log('🎵 Audio player created with URL:', audio.url);
+      console.log('🎵 URL type:', typeof audio.url);
+      
+      if (!audio.url) {
+        const errorMsg = 'Audio URL is undefined or null';
+        console.error('❌', errorMsg);
+        setPlayerError(errorMsg);
+        
+        // Log to file for debugging
+        try {
+          const logEntry = `[${new Date().toISOString()}] Audio Player Creation Failed\nAudio: ${audio.title}\nURL: ${audio.url}\nError: ${errorMsg}\nPlatform: ${Platform.OS}\n\n`;
+          const logPath = `${FileSystem.documentDirectory}audio_playback_errors.log`;
+          
+          FileSystem.getInfoAsync(logPath).then(fileInfo => {
+            if (fileInfo.exists) {
+              FileSystem.readAsStringAsync(logPath).then(existingContent => {
+                FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+              });
+            } else {
+              FileSystem.writeAsStringAsync(logPath, logEntry);
+            }
+          });
+        } catch (logError) {
+          console.error('Failed to log audio player creation error:', logError);
+        }
+      } else {
+        setPlayerError(null);
+        console.log('✅ Audio player created successfully');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('❌ Failed to create audio player:', errorMsg);
+      setPlayerError(errorMsg);
+    }
+  }, [audio.url, audio.title]);
   
   // Use status from the hook instead of local state
   const isPlaying = status.playing || false;
@@ -35,19 +81,84 @@ const AudioPlayerScreen: React.FC = () => {
   useEffect(() => {
     const configureAudio = async () => {
       try {
-        // Set audio mode for proper playback
+        // Set audio mode for proper playback - use only supported properties
         await setAudioModeAsync({
           playsInSilentMode: true,
           allowsRecording: false,
         });
-        console.log('Audio mode configured successfully');
+        console.log('✅ Audio mode configured successfully for', Platform.OS);
       } catch (error) {
-        console.error('Failed to configure audio mode:', error);
+        console.error('❌ Failed to configure audio mode:', error);
       }
     };
 
     configureAudio();
   }, []);
+
+  // Monitor audio status changes for debugging
+  useEffect(() => {
+    if (status) {
+      console.log('🎵 Audio status changed:', {
+        playing: status.playing,
+        currentTime: status.currentTime,
+        duration: status.duration,
+        isLoaded: status.isLoaded,
+        isBuffering: status.isBuffering,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Check if audio has completed
+      if (status.isLoaded && !status.playing && status.currentTime >= status.duration && status.duration > 0) {
+        console.log('🎵 Audio playback completed');
+        
+        // Log completion to file
+        try {
+          const logEntry = `[${new Date().toISOString()}] Audio Playback Completed\nAudio: ${audio.title}\nDuration: ${status.duration}s\nFinal Position: ${status.currentTime}s\nPlatform: ${Platform.OS}\n\n`;
+          const logPath = `${FileSystem.documentDirectory}audio_playback_errors.log`;
+          
+          FileSystem.getInfoAsync(logPath).then(fileInfo => {
+            if (fileInfo.exists) {
+              FileSystem.readAsStringAsync(logPath).then(existingContent => {
+                FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+              });
+            } else {
+              FileSystem.writeAsStringAsync(logPath, logEntry);
+            }
+          });
+        } catch (logError) {
+          console.error('Failed to log audio completion:', logError);
+        }
+      }
+      
+      // Log silent failures - check if audio should be playing but isn't
+      if (status.isLoaded && !status.playing && status.currentTime === 0) {
+        console.warn('⚠️ Potential silent failure detected:', {
+          isLoaded: status.isLoaded,
+          playing: status.playing,
+          currentTime: status.currentTime,
+          duration: status.duration
+        });
+        
+        // Log to file
+        try {
+          const logEntry = `[${new Date().toISOString()}] Silent Failure Detected\nAudio: ${audio.title}\nStatus: ${JSON.stringify(status)}\nPlatform: ${Platform.OS}\n\n`;
+          const logPath = `${FileSystem.documentDirectory}silent_audio_failures.log`;
+          
+          FileSystem.getInfoAsync(logPath).then(fileInfo => {
+            if (fileInfo.exists) {
+              FileSystem.readAsStringAsync(logPath).then(existingContent => {
+                FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+              });
+            } else {
+              FileSystem.writeAsStringAsync(logPath, logEntry);
+            }
+          });
+        } catch (logError) {
+          console.error('Failed to log silent failure:', logError);
+        }
+      }
+    }
+  }, [status, audio.title]);
 
   useEffect(() => {
     if (status.duration && status.duration > 0 && status.duration !== audio.duration) {
@@ -65,34 +176,139 @@ const AudioPlayerScreen: React.FC = () => {
 
   const handlePlayPause = async () => {
     try {
-      console.log('Play/Pause requested. Current state:', { isPlaying, audioTitle: audio.title });
-      console.log('Audio URL type:', typeof audio.url, 'URL:', audio.url);
-      console.log('Player status:', status);
+      console.log('🎵 Play/Pause requested. Current state:', { isPlaying, audioTitle: audio.title });
+      console.log('🎵 Audio URL type:', typeof audio.url, 'URL:', audio.url);
+      console.log('🎵 Player status:', status);
+      console.log('🎵 Platform:', Platform.OS);
+      console.log('🎵 Audio session state before play:', {
+        isPlaying,
+        position,
+        duration,
+        playerReady: !!player
+      });
+      
+      // Check if player is available
+      if (!player) {
+        const errorMsg = 'Audio player is not available';
+        console.error('❌', errorMsg);
+        
+        if (playerError) {
+          Alert.alert('Audio Player Error', `Failed to create audio player: ${playerError}\n\nPlease try restarting the app.`);
+        } else {
+          Alert.alert('Audio Player Error', 'Audio player is not ready. Please wait a moment and try again.');
+        }
+        return;
+      }
       
       if (isPlaying) {
-        console.log('Pausing audio...');
-        player.pause();
-        console.log('Audio paused successfully');
-      } else {
-        console.log('Playing audio...');
-        // Stop any other audio that might be playing
+        console.log('⏸️ Pausing audio...');
         try {
-          // This will stop the current player and start fresh
-          player.pause();
+          await player.pause();
+          console.log('✅ Audio paused successfully');
         } catch (pauseError) {
-          console.log('No previous audio to pause');
+          console.error('❌ Failed to pause audio:', pauseError);
+        }
+      } else {
+        console.log('▶️ Playing audio...');
+        
+        // iOS-specific: Ensure audio session is properly configured
+        if (Platform.OS === 'ios') {
+          try {
+            console.log('🔧 Configuring iOS audio mode...');
+            await setAudioModeAsync({
+              playsInSilentMode: true,
+              allowsRecording: false,
+            });
+            console.log('✅ iOS audio mode refreshed');
+          } catch (audioModeError) {
+            console.warn('⚠️ Failed to refresh iOS audio mode:', audioModeError);
+          }
         }
         
-        // Small delay to ensure clean start
-        setTimeout(() => {
-          player.play();
+        // Check if we need to reset to beginning
+        if (status.currentTime >= status.duration || status.currentTime > 0) {
+          console.log('🔄 Audio near end or not at beginning, resetting to start...');
+          try {
+            await player.seekTo(0);
+            console.log('✅ Audio reset to beginning');
+          } catch (seekError) {
+            console.warn('⚠️ Failed to reset audio position:', seekError);
+          }
+        }
+        
+        // Stop any other audio that might be playing
+        try {
+          console.log('🛑 Stopping any previous audio...');
+          await player.pause();
+          // Small delay to ensure clean stop
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (pauseError) {
+          console.log('ℹ️ No previous audio to pause');
+        }
+        
+        // Start playback
+        try {
+          console.log('🚀 Attempting to start playback...');
+          console.log('🎵 Player state before play:', {
+            playerExists: !!player,
+            playerMethods: Object.getOwnPropertyNames(player),
+            statusBeforePlay: status
+          });
+          
+          await player.play();
+          console.log('✅ Audio play command sent successfully');
+          
+          // Wait a bit and check if audio actually started
+          setTimeout(() => {
+            const newStatus = status;
+            console.log('🎵 Audio status after play attempt:', newStatus);
+            console.log('🎵 Is actually playing:', newStatus.playing);
+            console.log('🎵 Current time:', newStatus.currentTime);
+            
+            if (!newStatus.playing) {
+              console.warn('⚠️ Audio play command sent but not actually playing');
+              console.warn('⚠️ This might indicate a silent failure');
+              
+              // Log to file for debugging
+              try {
+                const logEntry = `[${new Date().toISOString()}] Silent Audio Failure\nAudio: ${audio.title}\nPlatform: ${Platform.OS}\nPlayer Status: ${JSON.stringify(newStatus)}\n\n`;
+                const logPath = `${FileSystem.documentDirectory}silent_audio_failures.log`;
+                
+                FileSystem.getInfoAsync(logPath).then(fileInfo => {
+                  if (fileInfo.exists) {
+                    FileSystem.readAsStringAsync(logPath).then(existingContent => {
+                      FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+                    });
+                  } else {
+                    FileSystem.writeAsStringAsync(logPath, logEntry);
+                  }
+                });
+                
+                console.log('📝 Silent failure logged to file:', logPath);
+              } catch (logError) {
+                console.error('Failed to log silent failure:', logError);
+              }
+            }
+          }, 1000);
+          
           incrementPlayCount(audio.id);
-          console.log('Audio play command sent successfully');
-        }, 100);
+        } catch (playError) {
+          console.error('❌ Failed to start playback:', playError);
+          console.error('❌ Play error details:', {
+            message: playError instanceof Error ? playError.message : String(playError),
+            stack: playError instanceof Error ? playError.stack : undefined,
+            playerState: {
+              playerExists: !!player,
+              playerMethods: Object.getOwnPropertyNames(player)
+            }
+          });
+          
+          Alert.alert('Playback Error', 'Failed to start audio playback. Please try again.');
+        }
       }
     } catch (error) {
-      console.error('Audio playback error:', error);
-      console.error('Error details:', {
+      console.error('❌ Audio playback error:', error);
+      console.error('❌ Error details:', {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         audio: {
@@ -100,9 +316,35 @@ const AudioPlayerScreen: React.FC = () => {
           urlType: typeof audio.url,
           url: audio.url,
         },
-        playerStatus: status
+        playerStatus: status,
+        platform: Platform.OS,
+        timestamp: new Date().toISOString()
       });
-      Alert.alert('Error', 'Failed to play audio. Please check if the file exists and is supported.');
+      
+      // Log to file for debugging
+      try {
+        const logEntry = `[${new Date().toISOString()}] Audio Playback Error\nAudio: ${audio.title}\nPlatform: ${Platform.OS}\nError: ${error instanceof Error ? error.message : String(error)}\nPlayer Status: ${JSON.stringify(status)}\n\n`;
+        const logPath = `${FileSystem.documentDirectory}audio_playback_errors.log`;
+        
+        const fileInfo = await FileSystem.getInfoAsync(logPath);
+        if (fileInfo.exists) {
+          const existingContent = await FileSystem.readAsStringAsync(logPath);
+          await FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+        } else {
+          await FileSystem.writeAsStringAsync(logPath, logEntry);
+        }
+        
+        console.log('📝 Audio error logged to file:', logPath);
+      } catch (logError) {
+        console.error('Failed to log audio error:', logError);
+      }
+      
+      let errorMessage = 'Failed to play audio. Please check if the file exists and is supported.';
+      if (Platform.OS === 'ios') {
+        errorMessage += ' On iOS, make sure your device is not on silent mode and try again.';
+      }
+      
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -122,112 +364,78 @@ const AudioPlayerScreen: React.FC = () => {
       
       incrementShareCount(audio.id);
       
-      // Create share message
-      const message = `Check out this audio: ${audio.title} by ${audio.author}\n\n${audio.description}\n\nListen now on AudioShare!`;
-      
-      // Check if sharing is available
-      const isAvailable = await Sharing.isAvailableAsync();
-      console.log('Sharing available:', isAvailable);
-      
-      if (!isAvailable) {
-        Alert.alert('Sharing Not Available', 'Sharing is not available on this device.');
-        return;
-      }
-      
-      // For asset modules (require() results), copy to documents and share
-      if (typeof audio.url === 'number') {
-        console.log('Sharing asset module - copying to documents first');
-        try {
-          // Copy asset to documents directory for sharing
-          const assetUri = audio.url;
-          const filename = `${audio.title.replace(/\s+/g, '_')}.mp3`;
-          const destUri = `${FileSystem.documentDirectory}${filename}`;
-          
-          // Copy the asset file
-          await FileSystem.copyAsync({
-            from: assetUri,
-            to: destUri
-          });
-          
-          console.log('Asset copied to:', destUri);
-          
-          // Now share the copied file
-          await Sharing.shareAsync(destUri, {
-            mimeType: 'audio/mpeg',
-            dialogTitle: `Share ${audio.title}`,
-          });
-          console.log('Asset file sharing completed successfully');
-        } catch (copyError) {
-          console.log('Failed to copy asset, falling back to text sharing:', copyError);
-          // Fallback to text sharing
-          await Sharing.shareAsync(message, {
-            mimeType: 'text/plain',
-            dialogTitle: `Share ${audio.title}`,
-          });
-        }
-      } else if (typeof audio.url === 'string') {
-        // For remote URLs, try to share the file
-        if (audio.url.startsWith('http')) {
-          console.log('Sharing remote URL:', audio.url);
-          try {
-            // Determine MIME type based on URL extension
-            let mimeType = 'audio/mpeg'; // default
-            if (audio.url.includes('.mp3')) mimeType = 'audio/mpeg';
-            else if (audio.url.includes('.wav')) mimeType = 'audio/wav';
-            else if (audio.url.includes('.m4a')) mimeType = 'audio/mp4';
-            else if (audio.url.includes('.aac')) mimeType = 'audio/aac';
-            
-            await Sharing.shareAsync(audio.url, {
-              mimeType: mimeType,
-              dialogTitle: `Share ${audio.title}`,
-            });
-            console.log('Remote file sharing completed successfully');
-          } catch (shareError) {
-            console.log('Remote file sharing failed, falling back to text sharing:', shareError);
-            // If file sharing fails, fallback to text sharing
-            await Sharing.shareAsync(message, {
-              mimeType: 'text/plain',
-              dialogTitle: `Share ${audio.title}`,
-            });
-            console.log('Fallback text sharing completed');
-          }
-        } else {
-          console.log('Sharing local file path (text only):', audio.url);
-          // Local file paths can't be shared, so share text
-          await Sharing.shareAsync(message, {
-            mimeType: 'text/plain',
-            dialogTitle: `Share ${audio.title}`,
-          });
-          console.log('Local file text sharing completed');
-        }
-      } else {
-        console.log('Unknown URL type, sharing text only');
-        // Unknown type, share text
-        await Sharing.shareAsync(message, {
-          mimeType: 'text/plain',
-          dialogTitle: `Share ${audio.title}`,
-        });
-        console.log('Unknown type text sharing completed');
-      }
-      
-      console.log('Share process completed successfully');
-    } catch (error) {
-      console.error('Share error:', error);
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        audio: {
-          title: audio.title,
-          urlType: typeof audio.url,
-          url: audio.url,
-        }
+      // Use the sharing service
+      const sharingService = SharingService.getInstance();
+      const result = await sharingService.shareAudio(audio.url, {
+        title: audio.title,
+        mimeType: 'audio/mpeg'
       });
-      Alert.alert('Error', 'Failed to share audio. Please try again.');
+      
+      if (result.success) {
+        console.log('Share completed successfully:', result.details);
+      } else {
+        console.error('Share failed:', result.error);
+        Alert.alert('Share Error', result.error || 'Failed to share audio');
+      }
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Share error:', errorMsg);
+      
+      // Log to file for debugging
+      try {
+        const logEntry = `[${new Date().toISOString()}] Share Error: ${errorMsg}\nAudio: ${audio.title} (${typeof audio.url})\nPlatform: ${Platform.OS}\n\n`;
+        const logPath = `${FileSystem.documentDirectory}share_errors.log`;
+        
+        const fileInfo = await FileSystem.getInfoAsync(logPath);
+        if (fileInfo.exists) {
+          const existingContent = await FileSystem.readAsStringAsync(logPath);
+          await FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
+        } else {
+          await FileSystem.writeAsStringAsync(logPath, logEntry);
+        }
+        
+        console.log('📝 Share error logged to file:', logPath);
+      } catch (logError) {
+        console.error('Failed to log share error to file:', logError);
+      }
+      
+      Alert.alert('Share Error', `Failed to share audio: ${errorMsg}\n\nCheck console logs for details.`);
     }
   };
 
   const handleToggleFavorite = () => {
     toggleFavorite(audio.id);
+  };
+
+  const handleDebug = async () => {
+    try {
+      console.log('🔍 Starting debug process...');
+      
+      // Run audio diagnosis
+      const diagnosis = await AudioDebugger.diagnoseAudioIssues();
+      console.log('Diagnosis result:', diagnosis);
+      
+      // Test current audio file
+      const audioTest = await AudioDebugger.testAudioFile(audio.url);
+      console.log('Audio file test:', audioTest);
+      
+      // Get platform-specific tips
+      const tips = AudioDebugger.getPlatformSpecificTips();
+      
+      let debugMessage = `Platform: ${Platform.OS}\n`;
+      debugMessage += `Audio Mode: ${diagnosis.success ? '✅ Configured' : '❌ Failed'}\n`;
+      debugMessage += `File System: ${diagnosis.fileSystemAccess ? '✅ Accessible' : '❌ Failed'}\n`;
+      debugMessage += `Sharing: ${diagnosis.sharingAvailable ? '✅ Available' : '❌ Failed'}\n`;
+      debugMessage += `Audio File: ${audioTest.valid ? '✅ Valid' : '❌ Invalid'}\n`;
+      debugMessage += `\nTips:\n${tips.map(tip => `• ${tip}`).join('\n')}`;
+      
+      Alert.alert('Debug Info', debugMessage);
+      
+    } catch (error) {
+      console.error('Debug failed:', error);
+      Alert.alert('Debug Error', 'Failed to run debug diagnostics.');
+    }
   };
 
   return (
@@ -237,6 +445,14 @@ const AudioPlayerScreen: React.FC = () => {
           <Text style={styles.audioTitle}>{audio.title}</Text>
           <Text style={styles.audioAuthor}>by {audio.author}</Text>
           <Text style={styles.audioDescription}>{audio.description}</Text>
+          
+          {/* Display audio player errors */}
+          {playerError && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>⚠️ Audio Player Error: {playerError}</Text>
+              <Text style={styles.errorSubtext}>Please try restarting the app</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -248,6 +464,26 @@ const AudioPlayerScreen: React.FC = () => {
               size={40}
               color="#6200ee"
             />
+          </TouchableOpacity>
+          
+          {/* Add reset button for debugging */}
+          <TouchableOpacity 
+            style={[styles.controlButton, styles.resetButton]} 
+            onPress={async () => {
+              try {
+                if (player) {
+                  console.log('🔄 Manual reset requested...');
+                  await player.seekTo(0);
+                  console.log('✅ Audio manually reset to beginning');
+                  Alert.alert('Reset', 'Audio reset to beginning');
+                }
+              } catch (error) {
+                console.error('❌ Failed to reset audio:', error);
+                Alert.alert('Reset Error', 'Failed to reset audio position');
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={24} color="#ff9800" />
           </TouchableOpacity>
         </View>
 
@@ -274,6 +510,11 @@ const AudioPlayerScreen: React.FC = () => {
           <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
             <Ionicons name="share-social" size={24} color="#6200ee" />
             <Text style={styles.actionButtonText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={handleDebug}>
+            <Ionicons name="bug" size={24} color="#ff9800" />
+            <Text style={styles.actionButtonText}>Debug</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -372,6 +613,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  resetButton: {
+    backgroundColor: '#fff3e0', // A light orange background
+    borderWidth: 1,
+    borderColor: '#ff9800',
+  },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -457,6 +703,25 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 12,
     color: '#1976d2',
+  },
+  errorContainer: {
+    backgroundColor: '#ffebee',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#d32f2f',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 12,
+    color: '#78909c',
+    marginTop: 5,
+    textAlign: 'center',
   },
 });
 
