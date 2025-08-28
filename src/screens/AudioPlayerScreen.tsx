@@ -27,9 +27,10 @@ const AudioPlayerScreen: React.FC = () => {
   const { audio } = route.params;
   const { toggleFavorite, incrementPlayCount, incrementShareCount } = useAudio();
   
-  // Create audio player at component level (following React hooks rules)
-  const player = useAudioPlayer(audio.url);
-  const status = useAudioPlayerStatus(player);
+  // Create audio player using expo-av
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [status, setStatus] = useState<any>({});
+  const [isPlaying, setIsPlaying] = useState(false);
   
   // Validate audio URL and track errors
   const [playerError, setPlayerError] = useState<string | null>(null);
@@ -72,19 +73,18 @@ const AudioPlayerScreen: React.FC = () => {
     }
   }, [audio.url, audio.title]);
   
-  // Use status from the hook instead of local state
-  const isPlaying = status.playing || false;
-  const position = status.currentTime || 0;
-  const duration = status.duration || audio.duration || 0; // Use status duration or fallback to audio.duration
+  // Use status from local state
+  const position = status.positionMillis ? status.positionMillis / 1000 : 0;
+  const duration = status.durationMillis ? status.durationMillis / 1000 : audio.duration || 0;
 
   // Configure audio mode and update duration when it becomes available
   useEffect(() => {
     const configureAudio = async () => {
       try {
         // Set audio mode for proper playback - use only supported properties
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          allowsRecording: false,
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: false,
         });
         console.log('✅ Audio mode configured successfully for', Platform.OS);
       } catch (error) {
@@ -184,11 +184,11 @@ const AudioPlayerScreen: React.FC = () => {
         isPlaying,
         position,
         duration,
-        playerReady: !!player
+        playerReady: !!sound
       });
       
       // Check if player is available
-      if (!player) {
+      if (!sound) {
         const errorMsg = 'Audio player is not available';
         console.error('❌', errorMsg);
         
@@ -203,7 +203,7 @@ const AudioPlayerScreen: React.FC = () => {
       if (isPlaying) {
         console.log('⏸️ Pausing audio...');
         try {
-          await player.pause();
+          await sound.pauseAsync();
           console.log('✅ Audio paused successfully');
         } catch (pauseError) {
           console.error('❌ Failed to pause audio:', pauseError);
@@ -215,9 +215,9 @@ const AudioPlayerScreen: React.FC = () => {
         if (Platform.OS === 'ios') {
           try {
             console.log('🔧 Configuring iOS audio mode...');
-            await setAudioModeAsync({
-              playsInSilentMode: true,
-              allowsRecording: false,
+            await Audio.setAudioModeAsync({
+              playsInSilentModeIOS: true,
+              allowsRecordingIOS: false,
             });
             console.log('✅ iOS audio mode refreshed');
           } catch (audioModeError) {
@@ -226,10 +226,10 @@ const AudioPlayerScreen: React.FC = () => {
         }
         
         // Check if we need to reset to beginning
-        if (status.currentTime >= status.duration || status.currentTime > 0) {
+        if (position >= duration || position > 0) {
           console.log('🔄 Audio near end or not at beginning, resetting to start...');
           try {
-            await player.seekTo(0);
+            await sound.setPositionAsync(0);
             console.log('✅ Audio reset to beginning');
           } catch (seekError) {
             console.warn('⚠️ Failed to reset audio position:', seekError);
@@ -239,7 +239,7 @@ const AudioPlayerScreen: React.FC = () => {
         // Stop any other audio that might be playing
         try {
           console.log('🛑 Stopping any previous audio...');
-          await player.pause();
+          await sound.pauseAsync();
           // Small delay to ensure clean stop
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (pauseError) {
@@ -250,12 +250,12 @@ const AudioPlayerScreen: React.FC = () => {
         try {
           console.log('🚀 Attempting to start playback...');
           console.log('🎵 Player state before play:', {
-            playerExists: !!player,
-            playerMethods: Object.getOwnPropertyNames(player),
+            playerExists: !!sound,
+            playerMethods: Object.getOwnPropertyNames(sound),
             statusBeforePlay: status
           });
           
-          await player.play();
+          await sound.playAsync();
           console.log('✅ Audio play command sent successfully');
           
           // Wait a bit and check if audio actually started
@@ -298,8 +298,8 @@ const AudioPlayerScreen: React.FC = () => {
             message: playError instanceof Error ? playError.message : String(playError),
             stack: playError instanceof Error ? playError.stack : undefined,
             playerState: {
-              playerExists: !!player,
-              playerMethods: Object.getOwnPropertyNames(player)
+              playerExists: !!sound,
+              playerMethods: Object.getOwnPropertyNames(sound)
             }
           });
           
@@ -350,7 +350,7 @@ const AudioPlayerScreen: React.FC = () => {
 
   const handleSeek = async (value: number) => {
     try {
-      player.seekTo(value);
+      await sound?.setPositionAsync(value * 1000);
     } catch (error) {
       console.error('Seek error:', error);
     }
@@ -471,9 +471,9 @@ const AudioPlayerScreen: React.FC = () => {
             style={[styles.controlButton, styles.resetButton]} 
             onPress={async () => {
               try {
-                if (player) {
+                if (sound) {
                   console.log('🔄 Manual reset requested...');
-                  await player.seekTo(0);
+                  await sound.setPositionAsync(0);
                   console.log('✅ Audio manually reset to beginning');
                   Alert.alert('Reset', 'Audio reset to beginning');
                 }

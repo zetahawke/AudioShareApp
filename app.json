@@ -16,7 +16,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.palmillamancos.audios"
+      "bundleIdentifier": "com.palmillamancos.audios",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,10 +38,9 @@
       "expo-router"
     ],
     "scheme": "palmillamancosaudios",
-    "infoPlist": {
-      "UIBackgroundModes": ["audio"],
-      "NSAppTransportSecurity": {
-        "NSAllowsArbitraryLoads": true
+    "extra": {
+      "router": {
+        "origin": false
       }
     }
   }
