@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { useAudio } from '../context/AudioContext';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system';
@@ -27,10 +27,9 @@ const AudioPlayerScreen: React.FC = () => {
   const { audio } = route.params;
   const { toggleFavorite, incrementPlayCount, incrementShareCount } = useAudio();
   
-  // Create audio player using expo-av
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [status, setStatus] = useState<any>({});
-  const [isPlaying, setIsPlaying] = useState(false);
+  // Create audio player using expo-audio
+  const player = useAudioPlayer(audio.url);
+  const status = useAudioPlayerStatus(player);
   
   // Validate audio URL and track errors
   const [playerError, setPlayerError] = useState<string | null>(null);
@@ -44,47 +43,31 @@ const AudioPlayerScreen: React.FC = () => {
         const errorMsg = 'Audio URL is undefined or null';
         console.error('❌', errorMsg);
         setPlayerError(errorMsg);
-        
-        // Log to file for debugging
-        try {
-          const logEntry = `[${new Date().toISOString()}] Audio Player Creation Failed\nAudio: ${audio.title}\nURL: ${audio.url}\nError: ${errorMsg}\nPlatform: ${Platform.OS}\n\n`;
-          const logPath = `${FileSystem.documentDirectory}audio_playback_errors.log`;
-          
-          FileSystem.getInfoAsync(logPath).then(fileInfo => {
-            if (fileInfo.exists) {
-              FileSystem.readAsStringAsync(logPath).then(existingContent => {
-                FileSystem.writeAsStringAsync(logPath, existingContent + logEntry);
-              });
-            } else {
-              FileSystem.writeAsStringAsync(logPath, logEntry);
-            }
-          });
-        } catch (logError) {
-          console.error('Failed to log audio player creation error:', logError);
-        }
-      } else {
-        setPlayerError(null);
-        console.log('✅ Audio player created successfully');
+        return;
       }
+
+      setPlayerError(null);
+      console.log('✅ Audio player created successfully');
+      
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('❌ Failed to create audio player:', errorMsg);
       setPlayerError(errorMsg);
     }
-  }, [audio.url, audio.title]);
+  }, [audio.url]);
   
-  // Use status from local state
-  const position = status.positionMillis ? status.positionMillis / 1000 : 0;
-  const duration = status.durationMillis ? status.durationMillis / 1000 : audio.duration || 0;
+  // Use status from the hook
+  const isPlaying = status.playing || false;
+  const position = status.currentTime || 0;
+  const duration = status.duration || audio.duration || 0;
 
-  // Configure audio mode and update duration when it becomes available
+  // Configure audio mode
   useEffect(() => {
     const configureAudio = async () => {
       try {
-        // Set audio mode for proper playback - use only supported properties
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          allowsRecordingIOS: false,
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: false,
         });
         console.log('✅ Audio mode configured successfully for', Platform.OS);
       } catch (error) {
@@ -184,11 +167,11 @@ const AudioPlayerScreen: React.FC = () => {
         isPlaying,
         position,
         duration,
-        playerReady: !!sound
+        playerReady: !!player
       });
       
       // Check if player is available
-      if (!sound) {
+      if (!player) {
         const errorMsg = 'Audio player is not available';
         console.error('❌', errorMsg);
         
@@ -203,7 +186,7 @@ const AudioPlayerScreen: React.FC = () => {
       if (isPlaying) {
         console.log('⏸️ Pausing audio...');
         try {
-          await sound.pauseAsync();
+          await player.pause();
           console.log('✅ Audio paused successfully');
         } catch (pauseError) {
           console.error('❌ Failed to pause audio:', pauseError);
@@ -215,9 +198,9 @@ const AudioPlayerScreen: React.FC = () => {
         if (Platform.OS === 'ios') {
           try {
             console.log('🔧 Configuring iOS audio mode...');
-            await Audio.setAudioModeAsync({
-              playsInSilentModeIOS: true,
-              allowsRecordingIOS: false,
+            await setAudioModeAsync({
+              playsInSilentMode: true,
+              allowsRecording: false,
             });
             console.log('✅ iOS audio mode refreshed');
           } catch (audioModeError) {
@@ -229,7 +212,7 @@ const AudioPlayerScreen: React.FC = () => {
         if (position >= duration || position > 0) {
           console.log('🔄 Audio near end or not at beginning, resetting to start...');
           try {
-            await sound.setPositionAsync(0);
+            await player.setPosition(0);
             console.log('✅ Audio reset to beginning');
           } catch (seekError) {
             console.warn('⚠️ Failed to reset audio position:', seekError);
@@ -239,7 +222,7 @@ const AudioPlayerScreen: React.FC = () => {
         // Stop any other audio that might be playing
         try {
           console.log('🛑 Stopping any previous audio...');
-          await sound.pauseAsync();
+          await player.pause();
           // Small delay to ensure clean stop
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (pauseError) {
@@ -250,12 +233,12 @@ const AudioPlayerScreen: React.FC = () => {
         try {
           console.log('🚀 Attempting to start playback...');
           console.log('🎵 Player state before play:', {
-            playerExists: !!sound,
-            playerMethods: Object.getOwnPropertyNames(sound),
+            playerExists: !!player,
+            playerMethods: Object.getOwnPropertyNames(player),
             statusBeforePlay: status
           });
           
-          await sound.playAsync();
+          await player.play();
           console.log('✅ Audio play command sent successfully');
           
           // Wait a bit and check if audio actually started
@@ -298,8 +281,8 @@ const AudioPlayerScreen: React.FC = () => {
             message: playError instanceof Error ? playError.message : String(playError),
             stack: playError instanceof Error ? playError.stack : undefined,
             playerState: {
-              playerExists: !!sound,
-              playerMethods: Object.getOwnPropertyNames(sound)
+              playerExists: !!player,
+              playerMethods: Object.getOwnPropertyNames(player)
             }
           });
           
@@ -350,7 +333,7 @@ const AudioPlayerScreen: React.FC = () => {
 
   const handleSeek = async (value: number) => {
     try {
-      await sound?.setPositionAsync(value * 1000);
+      await player?.setPosition(value * 1000);
     } catch (error) {
       console.error('Seek error:', error);
     }
@@ -471,9 +454,9 @@ const AudioPlayerScreen: React.FC = () => {
             style={[styles.controlButton, styles.resetButton]} 
             onPress={async () => {
               try {
-                if (sound) {
+                if (player) {
                   console.log('🔄 Manual reset requested...');
-                  await sound.setPositionAsync(0);
+                  await player.setPosition(0);
                   console.log('✅ Audio manually reset to beginning');
                   Alert.alert('Reset', 'Audio reset to beginning');
                 }

@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
-import { Audio } from 'expo-av';
+import { setAudioModeAsync } from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import { audioModules, audioManifest } from '../config/audioManifest';
 
@@ -53,10 +53,10 @@ export class AudioDebugger {
       // Test audio mode configuration
       console.log('🎵 Testing audio mode configuration...');
       try {
-              await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        allowsRecordingIOS: false,
-      });
+                      await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: false,
+        });
         console.log('✅ Audio mode configured successfully');
       } catch (audioModeError) {
         console.error('❌ Audio mode configuration failed:', audioModeError);

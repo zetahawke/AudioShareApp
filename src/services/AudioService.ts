@@ -50,26 +50,25 @@ class AudioService {
     try {
       const localAudioFiles: AudioFile[] = [];
 
-
-
       for (const manifestItem of audioManifest) {
         try {
           // Get the audio module from our static mapping
-          const audioModule = audioModules[manifestItem.filename];
+          const audioModule = audioModules[manifestItem.filename as keyof typeof audioModules];
           
           if (!audioModule) {
             console.warn(`⚠️ No static require found for ${manifestItem.filename}`);
             continue;
           }
           
-          // Create AudioFile object
+          // Create AudioFile object with the module number as URL
+          // expo-av can handle require() numbers directly
           const audioFile: AudioFile = {
             id: manifestItem.filename.replace('.mp3', ''), // Use filename as ID
             title: manifestItem.title,
             description: manifestItem.description,
             author: manifestItem.author,
             duration: manifestItem.estimatedDuration || 0, // Use estimated duration initially
-            url: audioModule,
+            url: audioModule, // Use the require() number directly - expo-av can handle this
             thumbnail: 'https://via.placeholder.com/150x150/6200ee/ffffff?text=🎵',
             category: manifestItem.category,
             tags: manifestItem.tags,

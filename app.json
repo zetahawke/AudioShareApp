@@ -34,9 +34,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router"
-    ],
+    "plugins": [],
     "scheme": "palmillamancosaudios",
     "extra": {
       "router": {
