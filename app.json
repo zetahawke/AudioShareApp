@@ -4,10 +4,10 @@
     "slug": "palmillamancosaudios",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-old.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-old.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,9 +18,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.palmillamancos.audios",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio"],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
@@ -28,22 +26,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-old.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.palmillamancos.audios"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon-old.png"
     },
     "plugins": [],
     "scheme": "palmillamancosaudios",
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "e001ae2e-b806-4ca5-b003-de74dfc1edf8"
       }
     }
   }
