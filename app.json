@@ -18,10 +18,14 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.palmillamancos.audios",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio",
+          "audio"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -39,6 +43,9 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "e001ae2e-b806-4ca5-b003-de74dfc1edf8"
       }
     }
   }
