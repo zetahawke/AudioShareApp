@@ -18,7 +18,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.palmillamancos.audios",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
@@ -39,6 +41,9 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "e001ae2e-b806-4ca5-b003-de74dfc1edf8"
       }
     }
   }
