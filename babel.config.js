@@ -4,7 +4,6 @@ module.exports = function (api) {
         presets: ["babel-preset-expo"],
         plugins: [
         // ... other plugins
-        'react-native-worklets/plugin', // Use the new plugin path
       ],
     };
   };
